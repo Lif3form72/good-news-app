@@ -1,0 +1,873 @@
+import React, { useState, useEffect } from 'react';
+import { Sun, Heart, Globe, Users, Sparkles, TrendingUp, BookOpen, Briefcase, Trophy, RefreshCw, Settings } from 'lucide-react';
+
+const GoodNewsApp = () => {
+  const [filterValue, setFilterValue] = useState(50);
+  const [filteredNews, setFilteredNews] = useState([]);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [selectedCategories, setSelectedCategories] = useState({
+    'Technology': true,
+    'Health & Medicine': true,
+    'Environment': true,
+    'Politics & Society': true,
+    'Science': true,
+    'Education': true,
+    'Economy': true,
+    'Sports & Culture': true
+  });
+  const [isLocal, setIsLocal] = useState(false);
+  const [sortBy, setSortBy] = useState('date'); // 'date' or 'category'
+  const [isLoadingNews, setIsLoadingNews] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(new Date());
+  const [allNews, setAllNews] = useState([]);
+  const [displayedArticles, setDisplayedArticles] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMoreArticles, setHasMoreArticles] = useState(false);
+
+  const ARTICLES_PER_PAGE = 12;
+  const MAX_STORED_ARTICLES = 200;
+
+  // RSS Feed Sources Configuration - simplified for demo
+  const rssSources = {
+    'good-news-network': {
+      name: 'Good News Network',
+      url: 'https://www.goodnewsnetwork.org/feed/',
+      enabled: true,
+      categories: ['Health & Medicine', 'Environment', 'Sports & Culture'],
+      isLocal: false
+    },
+    'nasa-news': {
+      name: 'NASA News',
+      url: 'https://www.nasa.gov/news/releases/latest/rss/',
+      enabled: true,
+      categories: ['Science', 'Technology'],
+      isLocal: false
+    },
+    'bbc-science': {
+      name: 'BBC Science',
+      url: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml',
+      enabled: true,
+      categories: ['Science', 'Environment'],
+      isLocal: false
+    }
+  };
+
+  // Category styling configuration
+  const categoryStyles = {
+    'Technology': { icon: <Sparkles className="w-5 h-5" />, color: "bg-indigo-100 text-indigo-800" },
+    'Health & Medicine': { icon: <Heart className="w-5 h-5" />, color: "bg-pink-100 text-pink-800" },
+    'Environment': { icon: <Sun className="w-5 h-5" />, color: "bg-yellow-100 text-yellow-800" },
+    'Politics & Society': { icon: <Users className="w-5 h-5" />, color: "bg-purple-100 text-purple-800" },
+    'Science': { icon: <Globe className="w-5 h-5" />, color: "bg-cyan-100 text-cyan-800" },
+    'Education': { icon: <BookOpen className="w-5 h-5" />, color: "bg-blue-100 text-blue-800" },
+    'Economy': { icon: <TrendingUp className="w-5 h-5" />, color: "bg-emerald-100 text-emerald-800" },
+    'Sports & Culture': { icon: <Trophy className="w-5 h-5" />, color: "bg-orange-100 text-orange-800" }
+  };
+
+  // Sample news data - REMOVED, using only real RSS feeds now
+  const sampleNews = [];
+
+  // Utility functions for article management
+  const createStableId = (title, link, pubDate, sourceId) => {
+    // Create a stable ID from article content that won't change between fetches
+    if (link) {
+      // Use URL as primary identifier
+      return btoa(link).replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
+    }
+    
+    // Fallback: use title + date + source
+    const content = `${title}-${pubDate}-${sourceId}`;
+    return btoa(content).replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
+  };
+
+  const saveArticlesToStorage = (articles) => {
+    try {
+      const dataToSave = {
+        articles: articles.slice(0, MAX_STORED_ARTICLES), // Limit storage size
+        lastUpdated: new Date().toISOString(),
+        version: '1.0'
+      };
+      localStorage.setItem('goodNewsArticles', JSON.stringify(dataToSave));
+      console.log(`Saved ${articles.length} articles to storage`);
+    } catch (error) {
+      console.error('Failed to save articles to storage:', error);
+    }
+  };
+
+  const loadArticlesFromStorage = () => {
+    try {
+      const saved = localStorage.getItem('goodNewsArticles');
+      if (saved) {
+        const { articles, lastUpdated, version } = JSON.parse(saved);
+        
+        // Check if data is less than 7 days old
+        const daysSinceUpdate = (Date.now() - new Date(lastUpdated).getTime()) / (1000 * 60 * 60 * 24);
+        
+        if (daysSinceUpdate < 7 && version === '1.0') {
+          console.log(`Loaded ${articles.length} articles from storage (${daysSinceUpdate.toFixed(1)} days old)`);
+          return articles;
+        } else {
+          console.log('Stored articles are too old, clearing storage');
+          localStorage.removeItem('goodNewsArticles');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load articles from storage:', error);
+    }
+    return [];
+  };
+
+  const mergeNewArticles = (existingArticles, newArticles) => {
+    console.log(`Merging ${newArticles.length} new articles with ${existingArticles.length} existing articles`);
+    
+    // Create a map of existing articles by ID for quick lookup
+    const existingIds = new Set(existingArticles.map(a => a.id));
+    
+    // Filter out articles we already have
+    const trulyNewArticles = newArticles.filter(article => {
+      const isNew = !existingIds.has(article.id);
+      if (!isNew) {
+        console.log(`Skipping duplicate article: ${article.title}`);
+      }
+      return isNew;
+    });
+    
+    console.log(`Found ${trulyNewArticles.length} truly new articles`);
+    
+    // Combine and sort by timestamp (newest first)
+    const combinedArticles = [...trulyNewArticles, ...existingArticles]
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      .slice(0, MAX_STORED_ARTICLES); // Limit total articles
+    
+    console.log(`Final article count: ${combinedArticles.length}`);
+    return combinedArticles;
+  };
+
+  const paginateArticles = (articles, page) => {
+    const startIndex = 0;
+    const endIndex = page * ARTICLES_PER_PAGE;
+    return articles.slice(startIndex, endIndex);
+  };
+
+  const fetchRSSFeed = async (sourceId, source) => {
+    console.log(`🔄 Attempting real RSS fetch from ${source.name}...`);
+    
+    try {
+      // Strategy 1: Try AllOrigins proxy (most reliable)
+      let response, data;
+      
+      try {
+        const allOriginsUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(source.url)}`;
+        console.log(`📡 Trying AllOrigins proxy for ${source.name}...`);
+        
+        response = await fetch(allOriginsUrl);
+        
+        if (response.ok) {
+          data = await response.json();
+          
+          if (data.contents) {
+            console.log(`✅ RSS SUCCESS: Real content from ${source.name}! XML length: ${data.contents.length}`);
+            return parseXMLToArticles(data.contents, sourceId, source);
+          }
+        }
+        
+        throw new Error('AllOrigins returned empty or failed');
+        
+      } catch (allOriginsError) {
+        console.log(`❌ AllOrigins blocked for ${source.name} (expected in Claude.ai environment)`);
+        
+        // Strategy 2: Try CORS.sh proxy
+        try {
+          const corsShUrl = `https://cors.sh/${source.url}`;
+          console.log(`📡 Trying CORS.sh proxy for ${source.name}...`);
+          
+          response = await fetch(corsShUrl, {
+            headers: {
+              'x-requested-with': 'XMLHttpRequest'
+            }
+          });
+          
+          if (response.ok) {
+            const xmlContent = await response.text();
+            console.log(`✅ RSS SUCCESS: Real content from ${source.name}! XML length: ${xmlContent.length}`);
+            return parseXMLToArticles(xmlContent, sourceId, source);
+          }
+          
+          throw new Error('CORS.sh failed');
+          
+        } catch (corsShError) {
+          console.log(`❌ CORS.sh blocked for ${source.name} (expected in Claude.ai environment)`);
+          
+          // Strategy 3: Try RSS2JSON API
+          try {
+            const rss2JsonUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(source.url)}`;
+            console.log(`📡 Trying RSS2JSON API for ${source.name}...`);
+            
+            response = await fetch(rss2JsonUrl);
+            
+            if (response.ok) {
+              const jsonData = await response.json();
+              
+              if (jsonData.status === 'ok' && jsonData.items) {
+                console.log(`✅ RSS SUCCESS: Real content from ${source.name}! ${jsonData.items.length} items`);
+                return parseJSONToArticles(jsonData.items, sourceId, source);
+              }
+            }
+            
+            throw new Error('RSS2JSON failed');
+            
+          } catch (rss2JsonError) {
+            console.log(`❌ RSS2JSON blocked for ${source.name} (expected in Claude.ai environment)`);
+            
+            // All real RSS strategies failed - use high-quality simulation
+            console.log(`🎭 Using realistic demo content for ${source.name} (Claude.ai environment limitation)`);
+            console.log(`🚀 In production deployment, real RSS would work here!`);
+            return createRealisticFallbackArticles(sourceId, source, true); // true = demo mode
+          }
+        }
+      }
+      
+    } catch (error) {
+      console.error(`Complete failure fetching ${source.name}:`, error);
+      return createRealisticFallbackArticles(sourceId, source, true);
+    }
+  };
+
+  const parseXMLToArticles = (xmlContent, sourceId, source) => {
+    try {
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(xmlContent, 'text/xml');
+      
+      // Check for parsing errors
+      const parserError = xmlDoc.querySelector('parsererror');
+      if (parserError) {
+        throw new Error('XML parsing failed');
+      }
+      
+      const items = xmlDoc.querySelectorAll('item');
+      console.log(`Found ${items.length} XML items from ${source.name}`);
+      
+      if (items.length === 0) {
+        throw new Error('No items found in RSS feed');
+      }
+      
+      const articles = Array.from(items).slice(0, 8).map((item, index) => {
+        const title = item.querySelector('title')?.textContent?.trim() || 'No title';
+        const description = item.querySelector('description')?.textContent || '';
+        const link = item.querySelector('link')?.textContent?.trim() || '';
+        const pubDate = item.querySelector('pubDate')?.textContent || new Date().toISOString();
+        const guid = item.querySelector('guid')?.textContent || '';
+        
+        // Clean HTML from description
+        const cleanDescription = description.replace(/<[^>]*>/g, '').trim().substring(0, 250);
+        
+        // Create stable ID
+        const stableId = createStableId(title, link || guid, pubDate, sourceId);
+        
+        return {
+          id: stableId,
+          title: title.substring(0, 150), // Reasonable title length
+          summary: cleanDescription + (cleanDescription.length >= 250 ? '...' : ''),
+          source: source.name,
+          category: source.categories[index % source.categories.length],
+          positivityScore: 70 + Math.floor(Math.random() * 25), // 70-95 range for positive bias
+          isLocal: source.isLocal,
+          timestamp: new Date(pubDate).toISOString(),
+          thumbnail: `https://images.unsplash.com/photo-150471143496${(index % 10) + 1}-e33886168f5c?w=400&h=200&fit=crop`,
+          url: link || '#',
+          needsAnalysis: false
+        };
+      });
+      
+      console.log(`✅ Successfully parsed ${articles.length} real articles from ${source.name}`);
+      return articles;
+      
+    } catch (error) {
+      console.error(`XML parsing error for ${source.name}:`, error);
+      throw error;
+    }
+  };
+
+  const parseJSONToArticles = (items, sourceId, source) => {
+    try {
+      console.log(`Parsing ${items.length} JSON items from ${source.name}`);
+      
+      const articles = items.slice(0, 8).map((item, index) => {
+        const title = item.title?.trim() || 'No title';
+        const description = item.description || item.content || '';
+        const link = item.link || item.url || '';
+        const pubDate = item.pubDate || item.published || new Date().toISOString();
+        
+        // Clean HTML from description
+        const cleanDescription = description.replace(/<[^>]*>/g, '').trim().substring(0, 250);
+        
+        // Create stable ID
+        const stableId = createStableId(title, link, pubDate, sourceId);
+        
+        return {
+          id: stableId,
+          title: title.substring(0, 150),
+          summary: cleanDescription + (cleanDescription.length >= 250 ? '...' : ''),
+          source: source.name,
+          category: source.categories[index % source.categories.length],
+          positivityScore: 70 + Math.floor(Math.random() * 25),
+          isLocal: source.isLocal,
+          timestamp: new Date(pubDate).toISOString(),
+          thumbnail: item.thumbnail || `https://images.unsplash.com/photo-150471143496${(index % 10) + 1}-e33886168f5c?w=400&h=200&fit=crop`,
+          url: link || '#',
+          needsAnalysis: false
+        };
+      });
+      
+      console.log(`✅ Successfully parsed ${articles.length} real JSON articles from ${source.name}`);
+      return articles;
+      
+    } catch (error) {
+      console.error(`JSON parsing error for ${source.name}:`, error);
+      throw error;
+    }
+  };
+
+  const createRealisticFallbackArticles = (sourceId, source, isDemoMode = false) => {
+    // This is our existing realistic fallback system
+    const createRealisticArticles = (sourceName, categories, isLocal) => {
+      const headlines = {
+        'Good News Network': [
+          'Community Garden Project Transforms Urban Neighborhood',
+          'Local Students Win National Science Competition', 
+          'Free Medical Clinic Opens in Downtown Area',
+          'Volunteer Program Helps Seniors Stay Connected',
+          'Clean Energy Initiative Reduces City Emissions by 30%',
+          'Food Bank Receives Record-Breaking Donation'
+        ],
+        'NASA News': [
+          'NASA Telescope Discovers Potentially Habitable Exoplanet',
+          'Mars Rover Makes Groundbreaking Geological Discovery',
+          'International Space Station Conducts Successful Medical Research',
+          'Solar Observatory Captures Stunning Coronal Mass Ejection',
+          'Artemis Mission Reaches New Milestone in Lunar Exploration',
+          'NASA Partners with Universities on Climate Research'
+        ],
+        'BBC Science': [
+          'Scientists Develop Revolutionary Cancer Treatment Method',
+          'Renewable Energy Breakthrough Could Transform Power Grid',
+          'Marine Biologists Discover New Species in Deep Ocean',
+          'AI Technology Helps Predict Natural Disasters Earlier',
+          'Climate Restoration Project Shows Promising Results',
+          'Medical Research Leads to Breakthrough in Rare Disease Treatment'
+        ]
+      };
+      
+      const summaries = {
+        'Good News Network': [
+          'Local community members have come together to create a thriving urban garden that provides fresh produce and brings neighbors closer together.',
+          'High school students from the local STEM program have achieved national recognition for their innovative environmental research project.',
+          'A new healthcare facility will provide essential medical services to underserved populations in the downtown community.',
+          'Intergenerational program connects young volunteers with elderly residents, reducing isolation and building meaningful relationships.',
+          'The city\'s renewable energy initiative has exceeded expectations, significantly reducing carbon emissions and energy costs.',
+          'Record-breaking community support enables food bank to expand services and reach more families in need.'
+        ],
+        'NASA News': [
+          'Advanced space telescope technology has identified a planet in the habitable zone with conditions that could potentially support life.',
+          'Robotic exploration mission uncovers evidence of ancient water activity and mineral formations on the Martian surface.',
+          'Microgravity experiments aboard the ISS advance understanding of human physiology and potential medical treatments.',
+          'Solar observation satellites capture detailed imagery of solar phenomena, improving space weather prediction capabilities.',
+          'Lunar exploration program achieves critical technical milestones, bringing human return to the Moon closer to reality.',
+          'Collaborative research initiative combines NASA expertise with academic institutions to address climate change challenges.'
+        ],
+        'BBC Science': [
+          'Innovative immunotherapy approach shows remarkable success rates in clinical trials for aggressive cancer types.',
+          'Next-generation solar panel technology promises to dramatically increase energy efficiency and reduce manufacturing costs.',
+          'Deep-sea research expedition discovers unique ecosystems and species previously unknown to science.',
+          'Machine learning algorithms trained on geological data improve early warning systems for earthquakes and tsunamis.',
+          'Large-scale environmental restoration demonstrates effective methods for reversing ecosystem damage.',
+          'Genetic research breakthrough offers new hope for patients with previously untreatable inherited conditions.'
+        ]
+      };
+      
+      const sourceHeadlines = headlines[sourceName] || headlines['Good News Network'];
+      const sourceSummaries = summaries[sourceName] || summaries['Good News Network'];
+      
+      return sourceHeadlines.slice(0, 6).map((headline, index) => {
+        const now = new Date();
+        const hoursAgo = index * 3 + Math.floor(Math.random() * 6);
+        const timestamp = new Date(now.getTime() - (hoursAgo * 60 * 60 * 1000));
+        
+        // Add [DEMO] prefix if in demo mode
+        const titlePrefix = isDemoMode ? '[DEMO] ' : '';
+        const simulatedUrl = `https://example.com/${sourceName.toLowerCase().replace(/\s+/g, '-')}/article-${headline.toLowerCase().replace(/[^a-z0-9]/g, '-').substring(0, 30)}`;
+        
+        return {
+          id: createStableId(headline, simulatedUrl, timestamp.toISOString(), sourceId),
+          title: titlePrefix + headline,
+          summary: sourceSummaries[index] || 'Breaking news from a trusted source covering important developments.',
+          source: sourceName + (isDemoMode ? ' (Demo)' : ''),
+          category: categories[index % categories.length],
+          positivityScore: 75 + Math.floor(Math.random() * 20),
+          isLocal: isLocal,
+          timestamp: timestamp.toISOString(),
+          thumbnail: `https://images.unsplash.com/photo-150471143496${index + 1}-e33886168f5c?w=400&h=200&fit=crop`,
+          url: simulatedUrl,
+          needsAnalysis: false
+        };
+      });
+    };
+    
+    const logMessage = isDemoMode 
+      ? `Creating realistic demo articles for ${source.name} (Claude.ai environment limitation)`
+      : `Creating fallback articles for ${source.name} due to RSS fetch failure`;
+      
+    console.log(logMessage);
+    return createRealisticArticles(source.name, source.categories, source.isLocal);
+  };
+
+  const fetchAllNews = async () => {
+    console.log('=== STARTING PROFESSIONAL RSS FETCH ===');
+    setIsLoadingNews(true);
+    
+    try {
+      // Fetch from all enabled RSS sources
+      const enabledSources = Object.entries(rssSources).filter(([_, source]) => source.enabled);
+      console.log(`Fetching from ${enabledSources.length} enabled sources:`, enabledSources.map(([id, s]) => s.name));
+      
+      const allFetchPromises = enabledSources.map(([sourceId, source]) => fetchRSSFeed(sourceId, source));
+      const allFetchedNews = await Promise.all(allFetchPromises);
+      const newArticles = allFetchedNews.flat();
+      
+      console.log(`Fetched ${newArticles.length} new articles`);
+      
+      if (newArticles.length > 0) {
+        // Merge with existing articles (deduplication happens here)
+        const existingArticles = allNews;
+        const mergedArticles = mergeNewArticles(existingArticles, newArticles);
+        
+        // Save to storage and update state
+        setAllNews(mergedArticles);
+        saveArticlesToStorage(mergedArticles);
+        setLastUpdated(new Date());
+        
+        console.log(`Updated article database with ${mergedArticles.length} total articles`);
+      } else {
+        console.log('No new articles fetched');
+      }
+      
+    } catch (error) {
+      console.error('Error in fetchAllNews:', error);
+    } finally {
+      setIsLoadingNews(false);
+    }
+  };
+
+  const loadMoreArticles = () => {
+    const nextPage = currentPage + 1;
+    const newDisplayedArticles = paginateArticles(filteredNews, nextPage);
+    
+    setDisplayedArticles(newDisplayedArticles);
+    setCurrentPage(nextPage);
+    setHasMoreArticles(newDisplayedArticles.length < filteredNews.length);
+    
+    console.log(`Loaded page ${nextPage}, showing ${newDisplayedArticles.length} of ${filteredNews.length} articles`);
+  };
+
+  const formatTimestamp = (timestamp) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffInMinutes = Math.abs(now - date) / (1000 * 60);
+    const diffInHours = diffInMinutes / 60;
+    const diffInDays = diffInHours / 24;
+    const diffInWeeks = diffInDays / 7;
+    const diffInMonths = diffInDays / 30;
+    
+    let relativeTime;
+    
+    if (diffInMinutes < 60) {
+      relativeTime = diffInMinutes < 1 ? "Just now" : `${Math.floor(diffInMinutes)}m ago`;
+    } else if (diffInHours < 24) {
+      relativeTime = `${Math.floor(diffInHours)}h ago`;
+    } else if (diffInDays < 7) {
+      relativeTime = diffInDays < 2 ? "Yesterday" : `${Math.floor(diffInDays)}d ago`;
+    } else if (diffInWeeks < 4) {
+      relativeTime = `${Math.floor(diffInWeeks)}w ago`;
+    } else {
+      relativeTime = `${Math.floor(diffInMonths)}mo ago`;
+    }
+    
+    return relativeTime;
+  };
+
+  const formatFullTimestamp = (timestamp) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const articleDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    
+    const timeString = date.toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true 
+    });
+    
+    // If it's today, just show time
+    if (articleDate.getTime() === today.getTime()) {
+      return timeString;
+    }
+    
+    // If it's this year, show month/day and time
+    if (date.getFullYear() === now.getFullYear()) {
+      const dateString = date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric' 
+      });
+      return `${dateString} ${timeString}`;
+    }
+    
+    // If it's a different year, show full date and time
+    const dateString = date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric'
+    });
+    return `${dateString} ${timeString}`;
+  };
+
+  const sortArticles = (articles) => {
+    if (sortBy === 'date') {
+      return [...articles].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    } else if (sortBy === 'category') {
+      return [...articles].sort((a, b) => {
+        if (a.category === b.category) {
+          return new Date(b.timestamp) - new Date(a.timestamp);
+        }
+        return a.category.localeCompare(b.category);
+      });
+    }
+    return articles;
+  };
+
+  const handleCategoryToggle = (category) => {
+    setSelectedCategories(prev => ({
+      ...prev,
+      [category]: !prev[category]
+    }));
+  };
+
+  useEffect(() => {
+    const filterAndPaginateNews = async () => {
+      let threshold;
+      if (filterValue <= 20) threshold = 80; // Only good news
+      else if (filterValue <= 40) threshold = 60; // Mostly good news
+      else if (filterValue <= 60) threshold = 40; // Balanced
+      else if (filterValue <= 80) threshold = 20; // Include some negative
+      else threshold = 0; // Unfiltered
+
+      const filtered = allNews.filter(article => {
+        const meetsPositivityThreshold = article.positivityScore >= threshold;
+        const matchesCategories = selectedCategories[article.category];
+        const matchesLocation = isLocal ? article.isLocal : true;
+        
+        return meetsPositivityThreshold && matchesCategories && matchesLocation;
+      });
+      
+      const sorted = sortArticles(filtered);
+      setFilteredNews(sorted);
+      
+      // Reset pagination when filters change
+      const initialPage = 1;
+      const initialDisplayed = paginateArticles(sorted, initialPage);
+      setDisplayedArticles(initialDisplayed);
+      setCurrentPage(initialPage);
+      setHasMoreArticles(initialDisplayed.length < sorted.length);
+      
+      console.log(`Filtered to ${sorted.length} articles, displaying first ${initialDisplayed.length}`);
+    };
+
+    filterAndPaginateNews();
+  }, [filterValue, selectedCategories, isLocal, sortBy, allNews]);
+
+  // Initialize with stored articles and fetch new ones
+  useEffect(() => {
+    console.log('=== INITIALIZING GOOD NEWS APP ===');
+    
+    // Load articles from storage first
+    const storedArticles = loadArticlesFromStorage();
+    if (storedArticles.length > 0) {
+      console.log(`Loaded ${storedArticles.length} articles from storage`);
+      setAllNews(storedArticles);
+      
+      // Update last updated time based on newest article
+      const newestArticle = storedArticles[0];
+      if (newestArticle) {
+        setLastUpdated(new Date(newestArticle.timestamp));
+      }
+    }
+    
+    // Fetch fresh articles after a brief delay
+    setTimeout(() => {
+      console.log('Auto-fetching fresh RSS news...');
+      fetchAllNews();
+    }, 1000);
+  }, []);
+
+  const getFilterLabel = (value) => {
+    if (value <= 20) return "Only Good News";
+    if (value <= 40) return "Mostly Positive";
+    if (value <= 60) return "Balanced";
+    if (value <= 80) return "Include Some Negative";
+    return "Unfiltered";
+  };
+
+  const getFilterColor = (value) => {
+    if (value <= 20) return "text-green-600";
+    if (value <= 40) return "text-blue-600";
+    if (value <= 60) return "text-yellow-600";
+    if (value <= 80) return "text-orange-600";
+    return "text-gray-600";
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b border-blue-100">
+        <div className="max-w-6xl mx-auto px-4 py-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
+                <Sun className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Good News</h1>
+                <p className="text-sm text-gray-600">Curate your news experience</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={fetchAllNews}
+                disabled={isLoadingNews}
+                className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoadingNews ? 'animate-spin' : ''}`} />
+                <span>{isLoadingNews ? 'Loading...' : 'Refresh News'}</span>
+              </button>
+              
+              <button className="flex items-center space-x-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm">
+                <Settings className="w-4 h-4" />
+                <span>Sources</span>
+              </button>
+            </div>
+            
+            <div className="text-right">
+              <div className="text-sm text-gray-500">
+                Showing {displayedArticles.length} of {filteredNews.length} stories
+                {allNews.length > 0 && (
+                  <span className="text-gray-400"> • {allNews.length} total in database</span>
+                )}
+              </div>
+              <div className="text-xs text-gray-400">
+                Updated {formatTimestamp(lastUpdated.toISOString())} • Sorted by{' '}
+                <button 
+                  onClick={() => setSortBy('date')}
+                  className={`hover:text-blue-600 ${sortBy === 'date' ? 'underline text-blue-600' : ''}`}
+                >
+                  Date
+                </button>
+                {' | '}
+                <button 
+                  onClick={() => setSortBy('category')}
+                  className={`hover:text-blue-600 ${sortBy === 'category' ? 'underline text-blue-600' : ''}`}
+                >
+                  Category
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filter Controls */}
+      <div className="max-w-6xl mx-auto px-4 py-6">
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">News Filter</h2>
+            {isAnalyzing && (
+              <div className="flex items-center space-x-2 text-blue-600">
+                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-sm">Analyzing...</span>
+              </div>
+            )}
+          </div>
+          
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-600">Only Good News</span>
+              <span className="text-sm text-gray-600">Unfiltered</span>
+            </div>
+            
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={filterValue}
+              onChange={(e) => setFilterValue(parseInt(e.target.value))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+              style={{
+                background: `linear-gradient(to right, #10b981 0%, #3b82f6 50%, #ef4444 100%)`
+              }}
+            />
+            
+            <div className="flex items-center justify-between">
+              <div className="text-center">
+                <div className={`text-lg font-semibold ${getFilterColor(filterValue)}`}>
+                  {getFilterLabel(filterValue)}
+                </div>
+                <div className="text-sm text-gray-500">
+                  Threshold: {filterValue <= 20 ? '80+' : filterValue <= 40 ? '60+' : filterValue <= 60 ? '40+' : filterValue <= 80 ? '20+' : '0+'} positivity score
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Category Filters */}
+          <div className="mt-6 border-t pt-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-md font-medium text-gray-900">News Categories</h3>
+              <div className="flex items-center space-x-3">
+                <span className="text-sm text-gray-600">World</span>
+                <button
+                  onClick={() => setIsLocal(!isLocal)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    isLocal ? 'bg-blue-600' : 'bg-gray-200'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      isLocal ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+                <span className="text-sm text-gray-600">Local</span>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {Object.entries(selectedCategories).map(([category, isSelected]) => {
+                const style = categoryStyles[category];
+                return (
+                  <label key={category} className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => handleCategoryToggle(category)}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                    />
+                    <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${style.color}`}>
+                      {style.icon}
+                      <span className="ml-1">{category}</span>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* News Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {displayedArticles.map((article) => {
+            const style = categoryStyles[article.category];
+            return (
+              <div key={article.id} className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden">
+                <div className="flex">
+                  <div className="flex-1 p-6">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${style.color}`}>
+                        {style.icon}
+                        <span className="ml-1">{article.category}</span>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+                        <span className="text-xs text-gray-600">{article.positivityScore}</span>
+                        {article.isLocal && (
+                          <span className="text-xs bg-blue-100 text-blue-800 px-1 py-0.5 rounded">Local</span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
+                      {article.title}
+                    </h3>
+                    
+                    <p className="text-gray-600 text-sm mb-4 line-clamp-2">
+                      {article.summary}
+                    </p>
+                    
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2 text-xs text-gray-500">
+                        <span>{article.source}</span>
+                        <span>•</span>
+                        <span>{formatFullTimestamp(article.timestamp)}</span>
+                        <span className="text-gray-400">({formatTimestamp(article.timestamp)})</span>
+                      </div>
+                      <button 
+                        onClick={() => article.url && window.open(article.url, '_blank')}
+                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                      >
+                        Read More →
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="w-24 h-24 m-4 flex-shrink-0">
+                    <img 
+                      src={article.thumbnail} 
+                      alt={article.title}
+                      className="w-full h-full object-cover rounded-lg"
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Load More Button */}
+        {hasMoreArticles && (
+          <div className="text-center mt-8">
+            <button
+              onClick={loadMoreArticles}
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            >
+              Load More Articles ({filteredNews.length - displayedArticles.length} remaining)
+            </button>
+          </div>
+        )}
+
+        {displayedArticles.length === 0 && !isLoadingNews && (
+          <div className="text-center py-12">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Globe className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No stories match your filter</h3>
+            <p className="text-gray-600">Try adjusting your filter settings to see more content.</p>
+            {allNews.length > 0 && (
+              <p className="text-sm text-gray-500 mt-2">
+                Database contains {allNews.length} articles total
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="bg-white border-t border-gray-200 mt-12">
+        <div className="max-w-6xl mx-auto px-4 py-6">
+          <div className="text-center text-sm text-gray-600">
+            <p>Good News App • Promoting positive mental health through curated news</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default GoodNewsApp;
