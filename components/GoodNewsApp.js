@@ -67,7 +67,211 @@ const GoodNewsApp = () => {
   // Sample news data - REMOVED, using only real RSS feeds now
   const sampleNews = [];
 
-  // Utility functions for article management
+  // Modular Sentiment Analysis System
+  const SentimentAnalyzer = {
+    // Method 1: Keyword-based analysis (current implementation)
+    keywordAnalysis: (title, summary) => {
+      const positiveKeywords = [
+        // Achievement & Success
+        'breakthrough', 'success', 'successful', 'achievement', 'accomplish', 'victory', 'triumph', 'win', 'winning', 'won',
+        'excel', 'outstanding', 'remarkable', 'exceptional', 'milestone', 'record-breaking', 'historic',
+        
+        // Innovation & Discovery
+        'discovery', 'discover', 'innovation', 'innovative', 'invention', 'breakthrough', 'advance', 'advancement',
+        'progress', 'development', 'cutting-edge', 'revolutionary', 'groundbreaking', 'pioneering', 'new',
+        
+        // Health & Healing
+        'cure', 'heal', 'healing', 'recovery', 'recover', 'treatment', 'therapy', 'medicine', 'healthy',
+        'life-saving', 'prevent', 'prevention', 'immune', 'vaccine', 'breakthrough', 'survival',
+        
+        // Help & Support
+        'help', 'helps', 'helping', 'support', 'assist', 'aid', 'rescue', 'save', 'saves', 'saving',
+        'donate', 'donation', 'charity', 'volunteer', 'community', 'together', 'unite', 'cooperation',
+        
+        // Improvement & Growth
+        'improve', 'improvement', 'better', 'enhance', 'upgrade', 'boost', 'increase', 'grow', 'growth',
+        'rise', 'rising', 'expand', 'expansion', 'strengthen', 'optimize', 'efficient', 'effective',
+        
+        // Positive Emotions
+        'hope', 'hopeful', 'optimistic', 'joy', 'happy', 'celebrate', 'celebration', 'proud', 'pride',
+        'inspire', 'inspiring', 'motivation', 'encouraging', 'uplifting', 'positive', 'amazing',
+        
+        // Environmental & Sustainability
+        'clean', 'green', 'sustainable', 'renewable', 'eco-friendly', 'conservation', 'restore',
+        'preserve', 'protect', 'environmental', 'climate-friendly', 'carbon-neutral', 'organic',
+        
+        // Education & Knowledge
+        'learn', 'education', 'teach', 'knowledge', 'wisdom', 'skill', 'training', 'scholarship',
+        'graduation', 'degree', 'literacy', 'research', 'study', 'science', 'understanding',
+        
+        // Peace & Safety
+        'peace', 'peaceful', 'safe', 'safety', 'secure', 'stability', 'harmony', 'agreement',
+        'cooperation', 'collaboration', 'unity', 'reconciliation', 'resolution', 'solution',
+        
+        // Economic Positives
+        'prosperity', 'wealth', 'profit', 'gain', 'benefit', 'employment', 'job', 'opportunity',
+        'investment', 'funding', 'grant', 'bonus', 'reward', 'economic growth', 'recovery'
+      ];
+
+      const negativeKeywords = [
+        // Disaster & Tragedy
+        'disaster', 'tragedy', 'catastrophe', 'crisis', 'emergency', 'calamity', 'devastation',
+        'destruction', 'collapse', 'crash', 'accident', 'explosion', 'fire', 'flood', 'earthquake',
+        
+        // Violence & Conflict
+        'war', 'violence', 'conflict', 'fight', 'attack', 'assault', 'terrorism', 'bomb', 'shooting',
+        'murder', 'kill', 'death', 'died', 'fatal', 'deadly', 'weapon', 'threat', 'invasion',
+        
+        // Crime & Legal Issues
+        'crime', 'criminal', 'theft', 'robbery', 'fraud', 'corruption', 'scandal', 'illegal',
+        'arrest', 'prison', 'guilty', 'convicted', 'lawsuit', 'court', 'investigation', 'police',
+        
+        // Health Problems
+        'disease', 'illness', 'sick', 'pandemic', 'epidemic', 'virus', 'infection', 'cancer',
+        'outbreak', 'contamination', 'toxic', 'poison', 'injury', 'wounded', 'hospital', 'emergency',
+        
+        // Economic Problems
+        'recession', 'depression', 'unemployment', 'layoffs', 'bankruptcy', 'debt', 'deficit',
+        'inflation', 'poverty', 'homeless', 'foreclosure', 'downturn', 'decline', 'loss', 'cut',
+        
+        // Failure & Problems
+        'fail', 'failure', 'problem', 'issue', 'concern', 'worry', 'risk', 'danger', 'threat',
+        'challenge', 'difficulty', 'struggle', 'setback', 'delay', 'cancel', 'postpone', 'reject',
+        
+        // Environmental Problems
+        'pollution', 'toxic', 'contamination', 'climate change', 'global warming', 'extinction',
+        'deforestation', 'drought', 'famine', 'waste', 'damage', 'harmful', 'dangerous',
+        
+        // Social Issues
+        'discrimination', 'racism', 'inequality', 'injustice', 'protest', 'riot', 'strike',
+        'controversy', 'argument', 'dispute', 'tension', 'division', 'conflict', 'opposition',
+        
+        // Negative Emotions
+        'fear', 'anxiety', 'stress', 'depression', 'anger', 'hate', 'sad', 'grief', 'despair',
+        'frustration', 'disappointment', 'shock', 'horror', 'panic', 'worried', 'concerned'
+      ];
+
+      const neutralKeywords = [
+        'report', 'according', 'study', 'research', 'analysis', 'data', 'statistics', 'survey',
+        'meeting', 'conference', 'announcement', 'statement', 'decision', 'plan', 'policy'
+      ];
+
+      const text = (title + ' ' + summary).toLowerCase();
+      let score = 50; // Neutral baseline
+      let positiveCount = 0;
+      let negativeCount = 0;
+      let neutralCount = 0;
+
+      // Count positive keywords
+      positiveKeywords.forEach(keyword => {
+        const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+        const matches = text.match(regex);
+        if (matches) {
+          positiveCount += matches.length;
+          score += matches.length * 8; // Each positive keyword adds 8 points
+        }
+      });
+
+      // Count negative keywords  
+      negativeKeywords.forEach(keyword => {
+        const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+        const matches = text.match(regex);
+        if (matches) {
+          negativeCount += matches.length;
+          score -= matches.length * 12; // Each negative keyword removes 12 points
+        }
+      });
+
+      // Count neutral keywords
+      neutralKeywords.forEach(keyword => {
+        const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+        const matches = text.match(regex);
+        if (matches) {
+          neutralCount += matches.length;
+        }
+      });
+
+      // Boost score for title keywords (titles are more important)
+      const titleText = title.toLowerCase();
+      positiveKeywords.forEach(keyword => {
+        if (titleText.includes(keyword)) {
+          score += 5; // Extra boost for positive words in title
+        }
+      });
+
+      negativeKeywords.forEach(keyword => {
+        if (titleText.includes(keyword)) {
+          score -= 8; // Extra penalty for negative words in title
+        }
+      });
+
+      // Ensure score stays within 0-100 range
+      score = Math.max(0, Math.min(100, Math.round(score)));
+
+      console.log(`Sentiment Analysis: "${title.substring(0, 50)}..." → Score: ${score} (P:${positiveCount}, N:${negativeCount}, NEU:${neutralCount})`);
+      
+      return score;
+    },
+
+    // Method 2: External API (MeaningCloud) - ready to implement
+    meaningCloudAnalysis: async (title, summary) => {
+      try {
+        const response = await fetch('/api/analyze-sentiment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, summary })
+        });
+        
+        const result = await response.json();
+        return result.positivityScore;
+      } catch (error) {
+        console.error('MeaningCloud API failed, falling back to keyword analysis:', error);
+        return SentimentAnalyzer.keywordAnalysis(title, summary);
+      }
+    },
+
+    // Method 3: Claude AI Analysis - ready to implement
+    claudeAnalysis: async (title, summary) => {
+      try {
+        const prompt = `
+        Rate this news article's positivity on a scale of 0-100:
+        - 0-20: Very negative (disasters, conflicts, tragedies, serious problems)
+        - 21-40: Negative (setbacks, concerns, challenging issues)
+        - 41-60: Neutral (factual reporting, mixed outcomes, routine news)
+        - 61-80: Positive (progress, achievements, helpful developments)
+        - 81-100: Very positive (breakthroughs, inspiring stories, major victories)
+
+        Consider both the content and tone. Focus on the impact on society and human wellbeing.
+
+        Title: ${title}
+        Summary: ${summary}
+
+        Respond with only the number (0-100).
+        `;
+
+        const response = await window.claude.complete(prompt);
+        const score = parseInt(response.trim());
+        
+        if (isNaN(score) || score < 0 || score > 100) {
+          throw new Error('Invalid score returned');
+        }
+        
+        console.log(`Claude Analysis: "${title.substring(0, 50)}..." → Score: ${score}`);
+        return score;
+      } catch (error) {
+        console.error('Claude API failed, falling back to keyword analysis:', error);
+        return SentimentAnalyzer.keywordAnalysis(title, summary);
+      }
+    },
+
+    // Current active method - easy to swap out
+    analyze: (title, summary) => {
+      // Switch between methods here:
+      return SentimentAnalyzer.keywordAnalysis(title, summary);
+      // return SentimentAnalyzer.meaningCloudAnalysis(title, summary);  // Uncomment for MeaningCloud
+      // return SentimentAnalyzer.claudeAnalysis(title, summary);        // Uncomment for Claude AI
+    }
+  };
   const createStableId = (title, link, pubDate, sourceId) => {
     // Create a stable ID from article content that won't change between fetches
     if (link) {
@@ -219,16 +423,16 @@ const GoodNewsApp = () => {
           } catch (rss2JsonError) {
             console.log(`❌ RSS2JSON blocked for ${source.name} (expected in Claude.ai environment)`);
             
-            // All real RSS strategies failed - use high-quality simulation
-            console.log(`🎭 Using backup content for ${source.name} (RSS temporarily unavailable)`);
-            return createRealisticFallbackArticles(sourceId, source, false); // false = no demo labels
+            // All real RSS strategies failed - return empty array instead of fallback
+            console.log(`❌ All RSS strategies failed for ${source.name} - no articles available`);
+            return []; // Return empty instead of fallback content
           }
         }
       }
       
     } catch (error) {
       console.error(`Complete failure fetching ${source.name}:`, error);
-      return createRealisticFallbackArticles(sourceId, source, false);
+      return []; // Return empty array - no fallback content
     }
   };
 
@@ -305,7 +509,7 @@ const GoodNewsApp = () => {
           summary: cleanDescription + (cleanDescription.length >= 250 ? '...' : ''),
           source: source.name,
           category: source.categories[index % source.categories.length],
-          positivityScore: 70 + Math.floor(Math.random() * 25), // 70-95 range for positive bias
+          positivityScore: SentimentAnalyzer.analyze(title, cleanDescription), // Real sentiment analysis
           isLocal: source.isLocal,
           timestamp: new Date(pubDate).toISOString(),
           thumbnail: thumbnail,
@@ -345,7 +549,7 @@ const GoodNewsApp = () => {
           summary: cleanDescription + (cleanDescription.length >= 250 ? '...' : ''),
           source: source.name,
           category: source.categories[index % source.categories.length],
-          positivityScore: 70 + Math.floor(Math.random() * 25),
+          positivityScore: SentimentAnalyzer.analyze(title, cleanDescription), // Real sentiment analysis
           isLocal: source.isLocal,
           timestamp: new Date(pubDate).toISOString(),
           thumbnail: item.thumbnail || `https://images.unsplash.com/photo-150471143496${(index % 10) + 1}-e33886168f5c?w=400&h=200&fit=crop`,
