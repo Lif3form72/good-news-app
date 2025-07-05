@@ -27,7 +27,7 @@ const GoodNewsApp = () => {
   const ARTICLES_PER_PAGE = 8;
   const MAX_STORED_ARTICLES = 200;
 
-  // RSS Feed Sources Configuration - simplified for demo
+  // RSS Feed Sources Configuration
   const rssSources = {
     'good-news-network': {
       name: 'Good News Network',
@@ -63,9 +63,6 @@ const GoodNewsApp = () => {
     'Economy': { icon: <TrendingUp className="w-5 h-5" />, color: "bg-emerald-100 text-emerald-800" },
     'Sports & Culture': { icon: <Trophy className="w-5 h-5" />, color: "bg-orange-100 text-orange-800" }
   };
-
-  // Sample news data - REMOVED, using only real RSS feeds now
-  const sampleNews = [];
 
   // Modular Sentiment Analysis System
   const SentimentAnalyzer = {
@@ -272,14 +269,13 @@ const GoodNewsApp = () => {
       // return SentimentAnalyzer.claudeAnalysis(title, summary);        // Uncomment for Claude AI
     }
   };
+
+  // Utility functions for article management
   const createStableId = (title, link, pubDate, sourceId) => {
-    // Create a stable ID from article content that won't change between fetches
     if (link) {
-      // Use URL as primary identifier
       return btoa(link).replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
     }
     
-    // Fallback: use title + date + source
     const content = `${title}-${pubDate}-${sourceId}`;
     return btoa(content).replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
   };
@@ -287,7 +283,7 @@ const GoodNewsApp = () => {
   const saveArticlesToStorage = (articles) => {
     try {
       const dataToSave = {
-        articles: articles.slice(0, MAX_STORED_ARTICLES), // Limit storage size
+        articles: articles.slice(0, MAX_STORED_ARTICLES),
         lastUpdated: new Date().toISOString(),
         version: '1.0'
       };
@@ -304,7 +300,6 @@ const GoodNewsApp = () => {
       if (saved) {
         const { articles, lastUpdated, version } = JSON.parse(saved);
         
-        // Check if data is less than 7 days old
         const daysSinceUpdate = (Date.now() - new Date(lastUpdated).getTime()) / (1000 * 60 * 60 * 24);
         
         if (daysSinceUpdate < 7 && version === '1.0') {
@@ -324,10 +319,8 @@ const GoodNewsApp = () => {
   const mergeNewArticles = (existingArticles, newArticles) => {
     console.log(`Merging ${newArticles.length} new articles with ${existingArticles.length} existing articles`);
     
-    // Create a map of existing articles by ID for quick lookup
     const existingIds = new Set(existingArticles.map(a => a.id));
     
-    // Filter out articles we already have
     const trulyNewArticles = newArticles.filter(article => {
       const isNew = !existingIds.has(article.id);
       if (!isNew) {
@@ -338,10 +331,9 @@ const GoodNewsApp = () => {
     
     console.log(`Found ${trulyNewArticles.length} truly new articles`);
     
-    // Combine and sort by timestamp (newest first)
     const combinedArticles = [...trulyNewArticles, ...existingArticles]
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-      .slice(0, MAX_STORED_ARTICLES); // Limit total articles
+      .slice(0, MAX_STORED_ARTICLES);
     
     console.log(`Final article count: ${combinedArticles.length}`);
     return combinedArticles;
@@ -357,17 +349,15 @@ const GoodNewsApp = () => {
     console.log(`🔄 Attempting real RSS fetch from ${source.name}...`);
     
     try {
-      // Strategy 1: Try AllOrigins proxy (most reliable)
-      let response, data;
-      
+      // Strategy 1: Try AllOrigins proxy
       try {
         const allOriginsUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(source.url)}`;
         console.log(`📡 Trying AllOrigins proxy for ${source.name}...`);
         
-        response = await fetch(allOriginsUrl);
+        const response = await fetch(allOriginsUrl);
         
         if (response.ok) {
-          data = await response.json();
+          const data = await response.json();
           
           if (data.contents) {
             console.log(`✅ RSS SUCCESS: Real content from ${source.name}! XML length: ${data.contents.length}`);
@@ -378,17 +368,15 @@ const GoodNewsApp = () => {
         throw new Error('AllOrigins returned empty or failed');
         
       } catch (allOriginsError) {
-        console.log(`❌ AllOrigins blocked for ${source.name} (expected in Claude.ai environment)`);
+        console.log(`❌ AllOrigins blocked for ${source.name}`);
         
         // Strategy 2: Try CORS.sh proxy
         try {
           const corsShUrl = `https://cors.sh/${source.url}`;
           console.log(`📡 Trying CORS.sh proxy for ${source.name}...`);
           
-          response = await fetch(corsShUrl, {
-            headers: {
-              'x-requested-with': 'XMLHttpRequest'
-            }
+          const response = await fetch(corsShUrl, {
+            headers: { 'x-requested-with': 'XMLHttpRequest' }
           });
           
           if (response.ok) {
@@ -400,14 +388,14 @@ const GoodNewsApp = () => {
           throw new Error('CORS.sh failed');
           
         } catch (corsShError) {
-          console.log(`❌ CORS.sh blocked for ${source.name} (expected in Claude.ai environment)`);
+          console.log(`❌ CORS.sh blocked for ${source.name}`);
           
           // Strategy 3: Try RSS2JSON API
           try {
             const rss2JsonUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(source.url)}`;
             console.log(`📡 Trying RSS2JSON API for ${source.name}...`);
             
-            response = await fetch(rss2JsonUrl);
+            const response = await fetch(rss2JsonUrl);
             
             if (response.ok) {
               const jsonData = await response.json();
@@ -421,18 +409,16 @@ const GoodNewsApp = () => {
             throw new Error('RSS2JSON failed');
             
           } catch (rss2JsonError) {
-            console.log(`❌ RSS2JSON blocked for ${source.name} (expected in Claude.ai environment)`);
-            
-            // All real RSS strategies failed - return empty array instead of fallback
+            console.log(`❌ RSS2JSON blocked for ${source.name}`);
             console.log(`❌ All RSS strategies failed for ${source.name} - no articles available`);
-            return []; // Return empty instead of fallback content
+            return [];
           }
         }
       }
       
     } catch (error) {
       console.error(`Complete failure fetching ${source.name}:`, error);
-      return []; // Return empty array - no fallback content
+      return [];
     }
   };
 
@@ -441,7 +427,6 @@ const GoodNewsApp = () => {
       const parser = new DOMParser();
       const xmlDoc = parser.parseFromString(xmlContent, 'text/xml');
       
-      // Check for parsing errors
       const parserError = xmlDoc.querySelector('parsererror');
       if (parserError) {
         throw new Error('XML parsing failed');
@@ -461,31 +446,25 @@ const GoodNewsApp = () => {
         const pubDate = item.querySelector('pubDate')?.textContent || new Date().toISOString();
         const guid = item.querySelector('guid')?.textContent || '';
         
-        // Clean HTML from description
         const cleanDescription = description.replace(/<[^>]*>/g, '').trim().substring(0, 250);
         
-        // Try to extract image from RSS content
-        let thumbnail = null; // Default to no image
+        let thumbnail = null;
         
-        // Look for images in the description
         const imgMatch = description.match(/<img[^>]+src="([^">]+)"/i);
         if (imgMatch && imgMatch[1]) {
           thumbnail = imgMatch[1];
         }
         
-        // Look for enclosure (RSS media)
         const enclosure = item.querySelector('enclosure');
         if (enclosure && enclosure.getAttribute('type')?.startsWith('image/')) {
           thumbnail = enclosure.getAttribute('url');
         }
         
-        // Look for media:content or media:thumbnail
         const mediaThumbnail = item.querySelector('media\\:thumbnail, thumbnail');
         if (mediaThumbnail) {
           thumbnail = mediaThumbnail.getAttribute('url') || mediaThumbnail.textContent;
         }
         
-        // Only use fallback image if we found a real image
         if (!thumbnail) {
           const fallbackImages = {
             'Technology': 'https://images.unsplash.com/photo-1518709268805-4e9042af2176?w=400&h=200&fit=crop',
@@ -499,17 +478,16 @@ const GoodNewsApp = () => {
           };
           thumbnail = fallbackImages[source.categories[index % source.categories.length]];
         }
-        
-        // Create stable ID
+
         const stableId = createStableId(title, link || guid, pubDate, sourceId);
-        
+
         return {
           id: stableId,
-          title: title.substring(0, 150), // Reasonable title length
+          title: title.substring(0, 150),
           summary: cleanDescription + (cleanDescription.length >= 250 ? '...' : ''),
           source: source.name,
           category: source.categories[index % source.categories.length],
-          positivityScore: SentimentAnalyzer.analyze(title, cleanDescription), // Real sentiment analysis
+          positivityScore: SentimentAnalyzer.analyze(title, cleanDescription),
           isLocal: source.isLocal,
           timestamp: new Date(pubDate).toISOString(),
           thumbnail: thumbnail,
@@ -537,10 +515,8 @@ const GoodNewsApp = () => {
         const link = item.link || item.url || '';
         const pubDate = item.pubDate || item.published || new Date().toISOString();
         
-        // Clean HTML from description
         const cleanDescription = description.replace(/<[^>]*>/g, '').trim().substring(0, 250);
         
-        // Create stable ID
         const stableId = createStableId(title, link, pubDate, sourceId);
         
         return {
@@ -549,7 +525,7 @@ const GoodNewsApp = () => {
           summary: cleanDescription + (cleanDescription.length >= 250 ? '...' : ''),
           source: source.name,
           category: source.categories[index % source.categories.length],
-          positivityScore: SentimentAnalyzer.analyze(title, cleanDescription), // Real sentiment analysis
+          positivityScore: SentimentAnalyzer.analyze(title, cleanDescription),
           isLocal: source.isLocal,
           timestamp: new Date(pubDate).toISOString(),
           thumbnail: item.thumbnail || `https://images.unsplash.com/photo-150471143496${(index % 10) + 1}-e33886168f5c?w=400&h=200&fit=crop`,
@@ -567,105 +543,11 @@ const GoodNewsApp = () => {
     }
   };
 
-  const createRealisticFallbackArticles = (sourceId, source, isDemoMode = false) => {
-    // This is our existing realistic fallback system
-    const createRealisticArticles = (sourceName, categories, isLocal) => {
-      const headlines = {
-        'Good News Network': [
-          'Community Garden Project Transforms Urban Neighborhood',
-          'Local Students Win National Science Competition', 
-          'Free Medical Clinic Opens in Downtown Area',
-          'Volunteer Program Helps Seniors Stay Connected',
-          'Clean Energy Initiative Reduces City Emissions by 30%',
-          'Food Bank Receives Record-Breaking Donation'
-        ],
-        'NASA News': [
-          'NASA Telescope Discovers Potentially Habitable Exoplanet',
-          'Mars Rover Makes Groundbreaking Geological Discovery',
-          'International Space Station Conducts Successful Medical Research',
-          'Solar Observatory Captures Stunning Coronal Mass Ejection',
-          'Artemis Mission Reaches New Milestone in Lunar Exploration',
-          'NASA Partners with Universities on Climate Research'
-        ],
-        'BBC Science': [
-          'Scientists Develop Revolutionary Cancer Treatment Method',
-          'Renewable Energy Breakthrough Could Transform Power Grid',
-          'Marine Biologists Discover New Species in Deep Ocean',
-          'AI Technology Helps Predict Natural Disasters Earlier',
-          'Climate Restoration Project Shows Promising Results',
-          'Medical Research Leads to Breakthrough in Rare Disease Treatment'
-        ]
-      };
-      
-      const summaries = {
-        'Good News Network': [
-          'Local community members have come together to create a thriving urban garden that provides fresh produce and brings neighbors closer together.',
-          'High school students from the local STEM program have achieved national recognition for their innovative environmental research project.',
-          'A new healthcare facility will provide essential medical services to underserved populations in the downtown community.',
-          'Intergenerational program connects young volunteers with elderly residents, reducing isolation and building meaningful relationships.',
-          'The city\'s renewable energy initiative has exceeded expectations, significantly reducing carbon emissions and energy costs.',
-          'Record-breaking community support enables food bank to expand services and reach more families in need.'
-        ],
-        'NASA News': [
-          'Advanced space telescope technology has identified a planet in the habitable zone with conditions that could potentially support life.',
-          'Robotic exploration mission uncovers evidence of ancient water activity and mineral formations on the Martian surface.',
-          'Microgravity experiments aboard the ISS advance understanding of human physiology and potential medical treatments.',
-          'Solar observation satellites capture detailed imagery of solar phenomena, improving space weather prediction capabilities.',
-          'Lunar exploration program achieves critical technical milestones, bringing human return to the Moon closer to reality.',
-          'Collaborative research initiative combines NASA expertise with academic institutions to address climate change challenges.'
-        ],
-        'BBC Science': [
-          'Innovative immunotherapy approach shows remarkable success rates in clinical trials for aggressive cancer types.',
-          'Next-generation solar panel technology promises to dramatically increase energy efficiency and reduce manufacturing costs.',
-          'Deep-sea research expedition discovers unique ecosystems and species previously unknown to science.',
-          'Machine learning algorithms trained on geological data improve early warning systems for earthquakes and tsunamis.',
-          'Large-scale environmental restoration demonstrates effective methods for reversing ecosystem damage.',
-          'Genetic research breakthrough offers new hope for patients with previously untreatable inherited conditions.'
-        ]
-      };
-      
-      const sourceHeadlines = headlines[sourceName] || headlines['Good News Network'];
-      const sourceSummaries = summaries[sourceName] || summaries['Good News Network'];
-      
-      return sourceHeadlines.slice(0, 6).map((headline, index) => {
-        const now = new Date();
-        const hoursAgo = index * 3 + Math.floor(Math.random() * 6);
-        const timestamp = new Date(now.getTime() - (hoursAgo * 60 * 60 * 1000));
-        
-        // Add [DEMO] prefix if in demo mode
-        const titlePrefix = isDemoMode ? '[DEMO] ' : '';
-        const simulatedUrl = `https://example.com/${sourceName.toLowerCase().replace(/\s+/g, '-')}/article-${headline.toLowerCase().replace(/[^a-z0-9]/g, '-').substring(0, 30)}`;
-        
-        return {
-          id: createStableId(headline, simulatedUrl, timestamp.toISOString(), sourceId),
-          title: titlePrefix + headline,
-          summary: sourceSummaries[index] || 'Breaking news from a trusted source covering important developments.',
-          source: sourceName + (isDemoMode ? ' (Demo)' : ''),
-          category: categories[index % categories.length],
-          positivityScore: 75 + Math.floor(Math.random() * 20),
-          isLocal: isLocal,
-          timestamp: timestamp.toISOString(),
-          thumbnail: `https://images.unsplash.com/photo-150471143496${index + 1}-e33886168f5c?w=400&h=200&fit=crop`,
-          url: simulatedUrl,
-          needsAnalysis: false
-        };
-      });
-    };
-    
-    const logMessage = isDemoMode 
-      ? `Creating realistic demo articles for ${source.name} (Claude.ai environment limitation)`
-      : `Creating fallback articles for ${source.name} due to RSS fetch failure`;
-      
-    console.log(logMessage);
-    return createRealisticArticles(source.name, source.categories, source.isLocal);
-  };
-
   const fetchAllNews = async () => {
     console.log('=== STARTING PROFESSIONAL RSS FETCH ===');
     setIsLoadingNews(true);
     
     try {
-      // Fetch from all enabled RSS sources
       const enabledSources = Object.entries(rssSources).filter(([_, source]) => source.enabled);
       console.log(`Fetching from ${enabledSources.length} enabled sources:`, enabledSources.map(([id, s]) => s.name));
       
@@ -676,11 +558,9 @@ const GoodNewsApp = () => {
       console.log(`Fetched ${newArticles.length} new articles`);
       
       if (newArticles.length > 0) {
-        // Merge with existing articles (deduplication happens here)
         const existingArticles = allNews;
         const mergedArticles = mergeNewArticles(existingArticles, newArticles);
         
-        // Save to storage and update state
         setAllNews(mergedArticles);
         saveArticlesToStorage(mergedArticles);
         setLastUpdated(new Date());
@@ -746,12 +626,10 @@ const GoodNewsApp = () => {
       hour12: true 
     });
     
-    // If it's today, just show time
     if (articleDate.getTime() === today.getTime()) {
       return timeString;
     }
     
-    // If it's this year, show month/day and time
     if (date.getFullYear() === now.getFullYear()) {
       const dateString = date.toLocaleDateString('en-US', { 
         month: 'short', 
@@ -760,7 +638,6 @@ const GoodNewsApp = () => {
       return `${dateString} ${timeString}`;
     }
     
-    // If it's a different year, show full date and time
     const dateString = date.toLocaleDateString('en-US', { 
       month: 'short', 
       day: 'numeric',
@@ -793,11 +670,11 @@ const GoodNewsApp = () => {
   useEffect(() => {
     const filterAndPaginateNews = async () => {
       let threshold;
-      if (filterValue <= 20) threshold = 80; // Only good news
-      else if (filterValue <= 40) threshold = 60; // Mostly good news
-      else if (filterValue <= 60) threshold = 40; // Balanced
-      else if (filterValue <= 80) threshold = 20; // Include some negative
-      else threshold = 0; // Unfiltered
+      if (filterValue <= 20) threshold = 80;
+      else if (filterValue <= 40) threshold = 60;
+      else if (filterValue <= 60) threshold = 40;
+      else if (filterValue <= 80) threshold = 20;
+      else threshold = 0;
 
       const filtered = allNews.filter(article => {
         const meetsPositivityThreshold = article.positivityScore >= threshold;
@@ -810,7 +687,6 @@ const GoodNewsApp = () => {
       const sorted = sortArticles(filtered);
       setFilteredNews(sorted);
       
-      // Reset pagination when filters change
       const initialPage = 1;
       const initialDisplayed = paginateArticles(sorted, initialPage);
       setDisplayedArticles(initialDisplayed);
@@ -823,24 +699,20 @@ const GoodNewsApp = () => {
     filterAndPaginateNews();
   }, [filterValue, selectedCategories, isLocal, sortBy, allNews]);
 
-  // Initialize with stored articles and fetch new ones
   useEffect(() => {
     console.log('=== INITIALIZING GOOD NEWS APP ===');
     
-    // Load articles from storage first
     const storedArticles = loadArticlesFromStorage();
     if (storedArticles.length > 0) {
       console.log(`Loaded ${storedArticles.length} articles from storage`);
       setAllNews(storedArticles);
       
-      // Update last updated time based on newest article
       const newestArticle = storedArticles[0];
       if (newestArticle) {
         setLastUpdated(new Date(newestArticle.timestamp));
       }
     }
     
-    // Fetch fresh articles after a brief delay
     setTimeout(() => {
       console.log('Auto-fetching fresh RSS news...');
       fetchAllNews();
@@ -1010,14 +882,13 @@ const GoodNewsApp = () => {
           </div>
         </div>
 
-        {/* News Grid - Optimized Layout */}
+        {/* News Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {displayedArticles.map((article) => {
             const style = categoryStyles[article.category];
             return (
               <div key={article.id} className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden">
                 <div className="flex flex-col">
-                  {/* Article Image - Only show if we have a valid image */}
                   {article.thumbnail && (
                     <div className="w-full h-48 flex-shrink-0 bg-gray-100">
                       <img 
@@ -1025,18 +896,15 @@ const GoodNewsApp = () => {
                         alt={article.title}
                         className="w-full h-full object-cover"
                         onError={(e) => {
-                          // Hide the entire image container if thumbnail fails
                           e.target.parentElement.style.display = 'none';
                         }}
                         onLoad={(e) => {
-                          // Ensure image container is visible when image loads successfully
                           e.target.parentElement.style.display = 'block';
                         }}
                       />
                     </div>
                   )}
                   
-                  {/* Article Content */}
                   <div className="p-6 flex-1">
                     <div className="flex items-start justify-between mb-4">
                       <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${style.color}`}>
@@ -1082,7 +950,6 @@ const GoodNewsApp = () => {
           })}
         </div>
 
-        {/* Load More Button */}
         {hasMoreArticles && (
           <div className="text-center mt-8">
             <button
