@@ -27,7 +27,7 @@ const GoodNewsApp = () => {
   const ARTICLES_PER_PAGE = 8;
   const MAX_STORED_ARTICLES = 200;
 
-  // RSS Feed Sources Configuration
+  // RSS Feed Sources Configuration - Expanded
   const rssSources = {
     'good-news-network': {
       name: 'Good News Network',
@@ -48,6 +48,41 @@ const GoodNewsApp = () => {
       url: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml',
       enabled: true,
       categories: ['Science', 'Environment'],
+      isLocal: false
+    },
+    'positive-news': {
+      name: 'Positive News',
+      url: 'https://www.positive.news/feed/',
+      enabled: true,
+      categories: ['Environment', 'Politics & Society', 'Health & Medicine'],
+      isLocal: false
+    },
+    'futurity': {
+      name: 'Futurity Research News',
+      url: 'https://www.futurity.org/feed/',
+      enabled: true,
+      categories: ['Science', 'Technology', 'Health & Medicine'],
+      isLocal: false
+    },
+    'sciencedaily': {
+      name: 'ScienceDaily',
+      url: 'https://www.sciencedaily.com/rss/all.xml',
+      enabled: true,
+      categories: ['Science', 'Health & Medicine', 'Technology'],
+      isLocal: false
+    },
+    'reuters-science': {
+      name: 'Reuters Science',
+      url: 'https://www.reuters.com/business/healthcare-pharmaceuticals/rss',
+      enabled: true,
+      categories: ['Science', 'Health & Medicine'],
+      isLocal: false
+    },
+    'mit-news': {
+      name: 'MIT News',
+      url: 'https://news.mit.edu/rss/feed',
+      enabled: true,
+      categories: ['Technology', 'Science', 'Education'],
       isLocal: false
     }
   };
@@ -668,20 +703,30 @@ const GoodNewsApp = () => {
   };
 
   useEffect(() => {
-    const filterAndPaginateNews = async () => {
+    const filterAndPaginateNews = () => {
+      // FIXED: Correct slider logic - lower values = more restrictive (higher positivity threshold)
       let threshold;
-      if (filterValue <= 20) threshold = 80;
-      else if (filterValue <= 40) threshold = 60;
-      else if (filterValue <= 60) threshold = 40;
-      else if (filterValue <= 80) threshold = 20;
-      else threshold = 0;
+      if (filterValue <= 20) threshold = 80; // Only very positive news (80-100)
+      else if (filterValue <= 40) threshold = 70; // Mostly positive news (70-100)
+      else if (filterValue <= 60) threshold = 50; // Balanced news (50-100)
+      else if (filterValue <= 80) threshold = 30; // Include some negative (30-100)
+      else threshold = 0; // Show everything (0-100)
+
+      console.log(`Filter slider: ${filterValue} → Positivity threshold: ${threshold}+`);
 
       const filtered = allNews.filter(article => {
         const meetsPositivityThreshold = article.positivityScore >= threshold;
         const matchesCategories = selectedCategories[article.category];
         const matchesLocation = isLocal ? article.isLocal : true;
         
-        return meetsPositivityThreshold && matchesCategories && matchesLocation;
+        const includeArticle = meetsPositivityThreshold && matchesCategories && matchesLocation;
+        
+        // Debug logging for first few articles
+        if (filtered.length < 3) {
+          console.log(`Article "${article.title.substring(0, 30)}..." score:${article.positivityScore} threshold:${threshold} → ${includeArticle ? 'INCLUDED' : 'FILTERED OUT'}`);
+        }
+        
+        return includeArticle;
       });
       
       const sorted = sortArticles(filtered);
@@ -693,7 +738,7 @@ const GoodNewsApp = () => {
       setCurrentPage(initialPage);
       setHasMoreArticles(initialDisplayed.length < sorted.length);
       
-      console.log(`Filtered to ${sorted.length} articles, displaying first ${initialDisplayed.length}`);
+      console.log(`Filter results: ${sorted.length} articles pass filter (showing first ${initialDisplayed.length})`);
     };
 
     filterAndPaginateNews();
